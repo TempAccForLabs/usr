@@ -94,8 +94,8 @@ app.add_middleware(
 
     # allow_credentials=True with allow_origins=["*"] - Firefox blocks this combination for security!
      # !!!!!!!!! SPECIFYING EXPLICIT ORIGINS !!!!!!!!!
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"], 
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

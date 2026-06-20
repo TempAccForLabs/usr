@@ -2,69 +2,57 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from typing import AsyncGenerator
 from sqlmodel import text, SQLModel
 from src.config import Config
-import ssl
 from sqlalchemy.orm import sessionmaker
+import os
 # IMPORTANT!
-# Even if you don’t use the classes directly in that file, 
+# Even if you don't use the classes directly in that file, 
 # importing it ensures the metadata includes it.
 from src.auth.models import User
 
-ssl_context = ssl.create_default_context()
+def get_async_db_url(url: str) -> str:
+    """Convert postgresql:// to postgresql+asyncpg:// for async driver"""
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    # Strip ?ssl query param - handled via connect_args
+    if "?ssl" in url:
+        url = url.split("?ssl")[0]
+    return url
+
+db_url = get_async_db_url(Config.DATABASE_URL)
+
+# Determine if SSL is needed (not needed for Replit's internal helium DB)
+_is_internal = "helium" in Config.DATABASE_URL or os.getenv("PGHOST", "") == "helium"
+
+if _is_internal:
+    connect_args = {}
+else:
+    import ssl
+    ssl_context = ssl.create_default_context()
+    connect_args = {"ssl": ssl_context}
 
 engine = create_async_engine(
-    url=Config.DATABASE_URL, # no ?sslmode=require&?channelbinding=require here in dburl
+    url=db_url,
     echo=True,
-    # asyncpg expects an actual ssl.SSLContext object, 
-    # not a string like ?sslmode=require in the dburl path in the .env file.
-    connect_args={"ssl": ssl_context},
-    # the following 2 resolve a session management issue 
-    pool_pre_ping=True,  # ✅ - checks connection before use
-    pool_recycle=300,    # ✅ - recycles connections every 5 minutes
+    connect_args=connect_args,
+    pool_pre_ping=True,
+    pool_recycle=300,
 )
-"""
-async def initdb():
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-        print("Database tables created successfully.")
-"""
 
 async def initdb():
     async with engine.begin() as conn:
-        # IMPORTANT!
-        # importing it ensures the metadata includes it.
         from src.auth.models import User
-
-        ### Drop all tables (only in dev!)
-        ## Important Note Below: 
-        # Model has been updated with 2 # 2FA Fields
-        # 1. is_2fa_enabled and
-        # 2. totp_secret
-        # this has to be run as well at least the first time
-        # outside dev mode
-
-        ######################
-        ######################
-        await conn.run_sync(SQLModel.metadata.drop_all)
-
-        # Create all tables
         await conn.run_sync(SQLModel.metadata.create_all)
-
-        # cemment out when not dropping tables
-        print("Dropped and recreated all tables.")
+        print("Database tables created/verified successfully.")
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    # async_sessionmaker creates a factory for instantiating sessions
     async_session = async_sessionmaker(
-        bind = engine,
-        class_ = AsyncSession,
-        expire_on_commit = False,
-        # suggested to improve session management
-        autoflush=False,  # ✅ FOR better control
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
     )
-
-    # PREV implementation - open a new session context
-    # async with async_session() as session:
-    #     yield session
     async with async_session() as session:
         try:
             yield session
@@ -72,5 +60,4 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
         finally:
-            await session.close()  # ✅ Ensure session is properly closed    
-    
+            await session.close()

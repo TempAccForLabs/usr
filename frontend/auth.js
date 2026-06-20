@@ -1,8 +1,7 @@
 class AuthService {
     constructor() {
         // base url to api calls to fastapi backend
-        this.baseURL = 'http://localhost:8000';
-        // this.baseURL = ''; // This will use same origin
+        this.baseURL = ''; // Use same origin (works with Replit proxy)
         
         // in the current implementation, the tokens and mail are
         // kept in the local storage
