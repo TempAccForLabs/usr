@@ -1,0 +1,31 @@
+uvicorn src:app --reload --host 0.0.0.0 --port 8000
+
+uvicorn src:app --reload --reload-dir=src --host 0.0.0.0 --port 8000
+
+
+1. BASIC LOGIN TEST - VERBOSE (OUTPUT)
+
+curl -v -X POST "http://localhost:8000/auth/login" \
+-H "Content-Type: application/json" \
+-d '{
+  "email": "test@example.com",
+  "password": "test123"
+}'
+
+2. WRONG PASSWORD 
+
+curl -X POST "http://localhost:8000/auth/login" \
+-H "Content-Type: application/json" \
+-d '{
+  "email": "test@example.com",
+  "password": "wrongpassword"
+}'
+
+3. >:( NON EXISTENT EMAIL (NOT TO SIGN UP WITH)  
+
+curl -X POST "http://localhost:8000/auth/login" \
+-H "Content-Type: application/json" \
+-d '{
+  "email": "nonexistent@example.com",
+  "password": "test123"
+}'

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USR - User Authentication</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href=",">
+</head>
+<body>
+    <div class="container">
+        <!-- ADD BACK THE HEADER WITH AUTH STATUS -->
+        <header>
+            <h1>USR Authentication</h1>
+            <div id="auth-status" class="auth-status">
+                <span id="user-email"></span> <!-- ADD THIS -->
+                <button id="logout-btn" class="btn btn-secondary" style="display: none;">Logout</button> <!-- ADD THIS -->
+            </div>
+        </header>
+        
+        <main>
+            <!-- Auth Forms -->
+            <div class="auth-section">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="login">Login</button>
+                    <button class="tab-btn" data-tab="signup">Sign Up</button>
+                </div>
+
+                <!-- Login Form -->
+                <div id="login-tab" class="tab-content active">
+                    <form id="login-form" class="auth-form">
+                        <h2>Login to Your Account</h2>
+                        <div class="form-group">
+                            <label for="login-email">Email:</label>
+                            <input type="email" id="login-email" required autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password:</label>
+                            <input type="password" id="login-password" required autocomplete="current-password">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Login</button>
+                        <div id="login-message" class="message"></div>
+                    </form>
+                </div>
+
+                <!-- Signup Form -->
+                <div id="signup-tab" class="tab-content">
+                    <form id="signup-form" class="auth-form" autocomplete="off">
+                        <input type="text" style="display:none" aria-hidden="true">
+                        <input type="password" style="display:none" aria-hidden="true">
+                        
+                        <h2>Create New Account</h2>
+                        <div class="form-group">
+                            <label for="signup-firstname">First Name:</label>
+                            <input type="text" id="signup-firstname" required autocomplete="given-name">
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-lastname">Last Name:</label>
+                            <input type="text" id="signup-lastname" required autocomplete="family-name">
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-username">Username:</label>
+                            <input type="text" id="signup-username" required maxlength="8" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-email">Email:</label>
+                            <input type="email" id="signup-email" required autocomplete="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-password">Password:</label>
+                            <input type="password" id="signup-password" required minlength="6" autocomplete="new-password">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Sign Up</button>
+                        <div id="signup-message" class="message"></div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Protected Content -->
+            <div id="protected-section" class="protected-section" style="display: none;">
+                <h2>Welcome to Protected Area</h2>
+                <div class="protected-content">
+                    <div class="btn-group">
+                        <button id="fetch-user-btn" class="btn btn-primary">Get My Profile</button>
+                        <button id="refresh-token-btn" class="btn btn-secondary">Refresh Token</button>
+                    </div>
+                    
+                    <!-- 2FA MANAGEMENT SECTION -->
+                    <div class="section" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                        <h3 style="margin-top: 0;">🔐 Two-Factor Authentication</h3>
+                        
+                        <!-- ALWAYS SHOW 2FA AS ENABLED -->
+                        <div id="2fa-status" class="2fa-status enabled">🟢 Always Enabled</div>
+                        
+                        <!-- HIDE ENABLE/DISABLE SECTIONS - ALWAYS ENABLED -->
+                        <div id="2fa-enable-section" style="display: none;">
+                            <h4>Enable 2FA</h4>
+                            <div class="form-group">
+                                <label for="enable-2fa-password">Current Password:</label>
+                                <input type="password" id="enable-2fa-password" placeholder="Enter your password">
+                            </div>
+                            <button id="enable-2fa-btn" class="btn btn-success" style="background: #28a745;">Enable 2FA</button>
+                            <div id="enable-2fa-message" class="message"></div>
+                        </div>
+                        
+                        <!-- HIDE DISABLE SECTION - ALWAYS ENABLED -->
+                        <div id="2fa-disable-section" style="display: none;">
+                            <h4>Disable 2FA</h4>
+                            <div class="form-group">
+                                <label for="disable-2fa-password">Current Password:</label>
+                                <input type="password" id="disable-2fa-password" placeholder="Enter your password">
+                            </div>
+                            <button id="disable-2fa-btn" class="btn btn-danger" style="background: #dc3545;">Disable 2FA</button>
+                            <div id="disable-2fa-message" class="message"></div>
+                        </div>
+                        
+                        <!-- TESTING INSTRUCTIONS FOR GETTING CURRENT TOTP CODE -->
+                        <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;">
+                            <h4>Testing Instructions:</h4>
+                            <p>For testing purposes, use the debug endpoint to get the current TOTP code:</p>
+                            <ol>
+                                <li>Click "Debug Auth" button</li>
+                                <li>Look for "Test Endpoints" button</li>
+                                <li>Use the /auth/debug/current-totp endpoint to get the current code</li>
+                                <li>Enter the code in the 2FA verification step</li>
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <!-- DEBUG PANEL -->
+                    <div class="debug-panel" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+                        <h3 style="margin-top: 0;">🔧 Debug Tools</h3>
+                        
+                        <div class="debug-buttons" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                            <button id="debug-auth-btn" class="btn btn-warning" style="background: #ffc107; color: black;">
+                                Debug Auth
+                            </button>
+                            <button id="test-endpoints-btn" class="btn btn-info" style="background: #17a2b8;">
+                                Test Endpoints
+                            </button>
+                            <button id="debug-logout-btn" class="btn btn-danger" style="background: #dc3545;">
+                                Debug Logout
+                            </button>
+                            <!-- ADD THIS FORCE REFRESH BUTTON -->
+                            <button id="force-refresh-btn" class="btn btn-warning" style="background: orange; color: black;">
+                                FORCE REFRESH
+                            </button>
+                        </div>
+                        
+                        <div id="debug-info" class="debug-info" style="font-family: monospace; font-size: 12px; background: white; padding: 10px; border-radius: 3px;">
+                            Debug info will appear here...
+                        </div>
+                    </div>
+                    
+                    <!-- <div id="user-data" class="user-data"></div> -->
+                    <div id="user-data" class="user-data" style="font-family: monospace; white-space: pre-wrap; font-size: 12px; background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 15px; min-height: 100px;">
+                        User data and token info will appear here...
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2FA MODALS -->
+            
+            <!-- 2FA Login Modal -->
+            <div id="2fa-login-modal" class="2fa-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+                <div style="background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px;">
+                    <h3>2FA Verification Required</h3>
+                    <p>Please enter the 6-digit code from the system (use debug endpoint to get current code).</p>
+                    <p><strong>Account:</strong> <span id="2fa-login-email"></span></p>
+                    
+                    <div class="form-group">
+                        <label for="login-2fa-code">2FA Code:</label>
+                        <input type="text" id="login-2fa-code" maxlength="6" placeholder="123456" style="text-align: center; font-size: 18px; letter-spacing: 2px;">
+                    </div>
+                    
+                    <div class="btn-group" style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button id="verify2fa-login-btn" class="btn btn-primary" style="flex: 1;">Verify</button>
+                        <button id="cancel-2fa-btn" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+                    </div>
+                    
+                    <div id="login-2fa-message" class="message" style="margin-top: 10px;"></div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ADDED 2FA.JS SCRIPT TAG TO COMPLETE THE WORKFLOW -->
+    <script src="auth.js"></script>
+    <script src="2fa.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

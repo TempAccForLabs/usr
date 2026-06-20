@@ -1,0 +1,36 @@
+Test This Fix:
+
+    Login successfully
+
+    Click "Get My Profile" - should work
+
+    Click "Get My Profile" again - should still work (auto-refresh)
+
+    Click "Refresh Token" - should show token changed
+
+    Check console logs for detailed debugging
+
+The key issues were:
+
+    Token refresh wasn't creating truly new tokens
+
+    Auto-refresh wasn't happening on subsequent API calls
+
+    Frontend wasn't properly handling the refreshed tokens
+
+uvicorn src:app --reload --reload-dir=src --host 0.0.0.0 --port 8000
+
+alembic revision --autogenerate -m "add 2fa fields to user table"
+
+alembic upgrade head
+
+alembic stamp head
+
+    First Name: Enter any first name (e.g., "Test")
+    Last Name: Enter any last name (e.g., "User")
+    Username: Enter a username (e.g., "testuser")
+    Email: Enter a valid email (e.g., "test@example.com ")
+    Password: Enter a password with at least 6 characters (e.g., "1e.2g.3,")
+     
+psql -d neon_db -U Neon_db_owner
+SELECT uid, email, is_2fa_enabled FROM user_accounts;     

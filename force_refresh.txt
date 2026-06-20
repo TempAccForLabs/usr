@@ -1,0 +1,19 @@
+What the FORCE REFRESH Button Does:
+
+    Manually triggers token refresh (bypassing auto-refresh logic)
+
+    Shows token comparison (proves if token actually changed)
+
+    Fetches fresh user data with the new token
+
+    Provides detailed console logging for debugging
+
+    Updates the debug display with current status
+
+Now you can:
+
+    Click "Get My Profile" multiple times (should work with auto-refresh)
+
+    Click "Refresh Token" for manual refresh
+
+    Click "FORCE REFRESH" for detailed token debugging and forced refresh

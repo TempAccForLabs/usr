@@ -1,0 +1,88 @@
+uvicorn src:app --reload  --host 0.0.0.0 --port 8000
+
+curl -X GET "http://localhost:8000/auth/debug/db-ping"
+
+# Signup and get TOTP code in one command - backend 2fa signup test proper
+
+TEMP_TOKEN=$(curl -s -X POST "http://localhost:8000/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"first_name":"Test","last_name":"User","username":"testuser","email":"test@example.com","password":"test123"}' | \
+  jq -r '.temp_token') && \
+TOTP_CODE=$(curl -s -X GET "http://localhost:8000/auth/debug/current-totp" -H "Authorization: Bearer $TEMP_TOKEN" | \
+  jq -r '.current_code') && \
+curl -s -X POST "http://localhost:8000/auth/verify-2fa-setup" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TEMP_TOKEN" \
+  -d "{\"code\": \"$TOTP_CODE\"}" | jq
+
+
+# Login and get TOTP code - only to be used to speed forward frontend test to 
+# verify validity of button for verification on successful 2fa login on modal 
+
+# Also this curl helps test immediately after the successful 2fa login,
+# the /auth/me endpoint. 
+
+curl -s -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"test123"}' | \
+  jq -r '.access_token' | \
+  xargs -I {} curl -s -X GET "http://localhost:8000/auth/debug/current-totp" \
+    -H "Authorization: Bearer {}" | jq -r '.current_code'
+
+# protected routes
+curl -X GET "http://localhost:8000/auth/me" \
+  -H "Authorization: Bearer YOUR_FULL_ACCESS_TOKEN"
+
+curl -X GET "http://localhost:8000/auth/refresh_token" \
+  -H "Authorization: Bearer YOUR_REFRESH_TOKEN"      
+
+
+# Login 2fa proper test - backend only
+
+TEMP_TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"test123"}' | \
+  jq -r '.access_token') && \
+TOTP_CODE=$(curl -s -X GET "http://localhost:8000/auth/debug/current-totp" \
+  -H "Authorization: Bearer $TEMP_TOKEN" | \
+  jq -r '.current_code') && \
+curl -s -X POST "http://localhost:8000/auth/verify-2fa" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TEMP_TOKEN" \
+  -d "{\"code\": \"$TOTP_CODE\"}" | jq  
+
+
+
+# Enhanced 2fa full login flow proper + debugging token
+"""
+    Login → get temp token
+
+    Get TOTP code
+
+    Complete 2FA verification → get full access token
+
+    Debug the full token to see if is_2fa_verified: true is set
+"""
+
+TEMP_TOKEN=$(curl -s -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"test123"}' | \
+  jq -r '.access_token') && \
+TOTP_CODE=$(curl -s -X GET "http://localhost:8000/auth/debug/current-totp" \
+  -H "Authorization: Bearer $TEMP_TOKEN" | \
+  jq -r '.current_code') && \
+FULL_TOKEN=$(curl -s -X POST "http://localhost:8000/auth/verify-2fa" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TEMP_TOKEN" \
+  -d "{\"code\": \"$TOTP_CODE\"}" | jq -r '.access_token') && \
+curl -s -X GET "http://localhost:8000/auth/debug/token-contents" \
+  -H "Authorization: Bearer $FULL_TOKEN" | jq
+
+
+# 1. manual signup testing produces error - result undefined
+# 2. complexity check of password on signup
+# 3. signup + login => via mail client  
+# 4. if one time pad, why multiple logins with same code allowed 
+## even if the time has been prolonged for testing purposes, singleton implementation?!
+# 5. app.js check 2fa ctatus method check2FAStatus calls twoFA, in frontend/ there is 
+## only 2fa

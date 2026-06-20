@@ -1,0 +1,28 @@
+uvicorn src:app --reload --host 0.0.0.0 --port 8000
+
+uvicorn src:app --reload --reload-dir=src --host 0.0.0.0 --port 8000
+
+1. Test Protected Route with Token (after successful login)
+
+First, copy the access_token from the login response, then:
+curl -X GET "http://localhost:8000/auth/me" \
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN_HERE"
+
+2. Test Token Refresh:
+
+curl -X GET "http://localhost:8000/auth/refresh_token" \
+-H "Authorization: Bearer YOUR_REFRESH_TOKEN_HERE"
+
+3. Quick one liner for testing 
+
+# Test login and pretty print response
+curl -s -X POST "http://localhost:8000/auth/login" \
+-H "Content-Type: application/json" \
+-d '{"email":"test@example.com","password":"test123"}' | python3 -m json.tool
+
+Status codes:
+403 Forbidden: Invalid email or password
+
+500 Internal Server Error: Database or server issues
+
+405 Method Not Allowed: Wrong HTTP method or endpoint

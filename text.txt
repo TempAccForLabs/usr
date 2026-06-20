@@ -1,0 +1,171 @@
+uvicorn src:app --reload --host 0.0.0.0 --port 8000
+
+python -c "from src.auth.routes import auth_router; print('Import successful')"
+
+curl -X POST "http://localhost:8000/auth/signup" \
+-H "Content-Type: application/json" \
+-d '{
+  "first_name": "Test",
+  "last_name": "User", 
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "test123"
+}'
+
+to test same password, ex:
+
+curl -X POST "http://localhost:8000/auth/signup" \
+-H "Content-Type: application/json" \
+-d '{
+  "first_name": "Test",
+  "last_name": "User", 
+  "username": "testuser",
+  "email": "test123@example.com",
+  "password": "test123"
+}'
+
+
+
+Backend API: http://localhost:8000/docs
+Frontend: http://localhost:8000 
+
+Go to http://localhost:8000/docs
+You should see USR Authentication API with these endpoints:
+
+POST /auth/signup
+
+POST /auth/login
+
+GET /auth/refresh_token
+
+GET /auth/me
+
+
+
+        
+
+#######################################################
+#######################################################
+
+ 
+Step 1: Open Browser Developer Tools
+
+    Open frontend/index.html in your browser
+
+    Press F12 or right-click → "Inspect Element"
+
+    Go to the Application tab (or Storage in some browsers)
+
+Step 2: Check LocalStorage Before Login
+
+    In the Application tab, expand "Local Storage" in the left sidebar
+
+    Click on your website URL
+
+    You should see it's empty before login
+
+Step 3: Perform Login
+
+    Fill in the login form:
+
+        Email: test@example.com (from your registration)
+
+        Password: password123
+
+    Click "Login"
+
+Step 4: Verify JWT Tokens in LocalStorage
+
+    Immediately after login, look at the Application tab again
+
+Key              Value
+access_token     eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9... (long JWT string)
+refresh_token    eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9... (long JWT string) 
+user_email       test@example.com
+
+#######################################################
+#######################################################
+
+
+HOW TO TEST PROTECTED ROUTE
+Step 1: Verify You're Logged In
+
+    You should see the protected area after login (not the login form)
+
+    Header should show "test@example.com" and "Logout" button
+
+Step 2: Click "Get My Profile"
+
+    This button calls the /auth/me endpoint which requires a valid JWT
+
+    The frontend automatically attaches your access_token to the request
+
+Step 3: Check What Happens
+
+In the Network Tab:
+
+    Go to Network tab in Developer Tools
+
+    Click "Get My Profile"
+
+    You'll see a request to http://localhost:8000/auth/me
+
+    Click on it → check Headers:
+    text
+
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+
+In the Response:
+You should see:
+json
+
+{
+  "user": {
+    "email": "test@example.com",
+    "user_uid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  },
+  "message": "This is a protected route"
+}
+
+This proves: Your JWT token is valid and the backend recognized you!
+
+#######################################################
+#######################################################
+
+
+HOW TO TEST TOKEN REFRESH
+Step 1: Check Current Access Token
+
+    In Application tab → Local Storage → copy your current access_token
+
+    Note the first few characters: eyJ0eXAiOiJKV1QiLCJhbGciOiJ...
+
+Step 2: Click "Refresh Token"
+
+    This calls /auth/refresh_token with your refresh_token
+
+    The backend validates the refresh token and issues a new access token
+
+Step 3: Verify Token Changed
+
+    Go back to Application tab → Local Storage
+
+    Look at the access_token value
+
+    It should be different from the one you copied earlier!
+
+    The first few characters will be different: eyJ0eXAiOiJKV1QiLCJhbGciOiJ...
+
+Step 4: Test the New Token Works
+
+    Click "Get My Profile" again
+
+    It should still work with the new token
+
+    Check Network tab → the Authorization header uses the new token
+
+for db
+psql $DATABASE_URL -c "SELECT uid, username, email, created_at FROM user_accounts;"
+
+to generate the totp key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
