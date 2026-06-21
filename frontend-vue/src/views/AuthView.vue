@@ -1,6 +1,5 @@
 <template>
   <main>
-    <!-- Auth Forms -->
     <div class="auth-section">
       <div class="tabs">
         <button
@@ -110,23 +109,13 @@
       </div>
     </div>
 
-    <!-- 2FA Login Modal -->
-    <TwoFAModal
-      v-if="show2FALogin"
-      title="2FA Verification Required"
-      description="Please enter the 6-digit code from the system (use the debug endpoint to get the current code)."
-      :user-email="auth.state.userEmail"
-      input-id="login-2fa-code"
-      ref="loginModalRef"
-      @submit="verify2FALogin"
-      @cancel="cancel2FA"
-    />
-
-    <!-- 2FA Signup Modal -->
+    <!-- 2FA Signup Modal — shows QR code for authenticator app scan -->
     <TwoFAModal
       v-if="show2FASignup"
-      title="Complete Your Signup"
-      description="Please enter the 6-digit code to verify your account (use the debug endpoint to get the current code)."
+      title="Set Up Two-Factor Authentication"
+      :user-email="signupUserEmail"
+      :qr-code="signupQrCode"
+      :manual-code="signupManualCode"
       input-id="signup-2fa-code"
       ref="signupModalRef"
       @submit="verify2FASignup"
@@ -141,35 +130,20 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth.js'
 import TwoFAModal from '../components/TwoFAModal.vue'
 
-const auth = useAuth()
+const auth   = useAuth()
 const router = useRouter()
 
 const activeTab = ref('login')
 
-// Login state
-const loginForm = reactive({ email: '', password: '' })
-const loginLoading = ref(false)
-const loginMessage = ref('')
+// ── Login state ────────────────────────────────────────────────────────────
+const loginForm        = reactive({ email: '', password: '' })
+const loginLoading     = ref(false)
+const loginMessage     = ref('')
 const loginMessageType = ref('info')
-const show2FALogin = ref(false)
-const loginModalRef = ref(null)
-
-// Signup state
-const signupForm = reactive({ first_name: '', last_name: '', username: '', email: '', password: '' })
-const signupLoading = ref(false)
-const signupMessage = ref('')
-const signupMessageType = ref('info')
-const show2FASignup = ref(false)
-const signupModalRef = ref(null)
 
 function setLoginMsg(msg, type = 'info') {
-  loginMessage.value = msg
+  loginMessage.value     = msg
   loginMessageType.value = type
-}
-
-function setSignupMsg(msg, type = 'info') {
-  signupMessage.value = msg
-  signupMessageType.value = type
 }
 
 async function handleLogin() {
@@ -177,13 +151,8 @@ async function handleLogin() {
   setLoginMsg('Logging in…', 'info')
   try {
     const result = await auth.login(loginForm.email, loginForm.password)
-    if (result.requires2FA) {
-      setLoginMsg('2FA verification required', 'info')
-      show2FALogin.value = true
-    } else {
-      setLoginMsg('Login successful!', 'success')
-      router.replace('/dashboard')
-    }
+    setLoginMsg('Login successful!', 'success')
+    router.replace('/dashboard')
   } catch (err) {
     setLoginMsg(err.message, 'error')
   } finally {
@@ -191,22 +160,20 @@ async function handleLogin() {
   }
 }
 
-async function verify2FALogin(code) {
-  try {
-    loginModalRef.value?.setMessage('Verifying 2FA code…', 'info')
-    await auth.complete2FALogin(code)
-    show2FALogin.value = false
-    router.replace('/dashboard')
-  } catch (err) {
-    loginModalRef.value?.setMessage(err.message, 'error')
-    throw err
-  }
-}
+// ── Signup state ───────────────────────────────────────────────────────────
+const signupForm        = reactive({ first_name: '', last_name: '', username: '', email: '', password: '' })
+const signupLoading     = ref(false)
+const signupMessage     = ref('')
+const signupMessageType = ref('info')
+const show2FASignup     = ref(false)
+const signupModalRef    = ref(null)
+const signupQrCode      = ref('')
+const signupManualCode  = ref('')
+const signupUserEmail   = ref('')
 
-function cancel2FA() {
-  show2FALogin.value = false
-  auth.clear2FAState()
-  setLoginMsg('', 'info')
+function setSignupMsg(msg, type = 'info') {
+  signupMessage.value     = msg
+  signupMessageType.value = type
 }
 
 async function handleSignup() {
@@ -214,6 +181,9 @@ async function handleSignup() {
   setSignupMsg('Creating account…', 'info')
   try {
     const result = await auth.signup(signupForm)
+    signupQrCode.value     = result.qr_code    || ''
+    signupManualCode.value = result.manual_code || ''
+    signupUserEmail.value  = result.user_email  || signupForm.email
     setSignupMsg(result.message, 'info')
     show2FASignup.value = true
   } catch (err) {
@@ -225,7 +195,7 @@ async function handleSignup() {
 
 async function verify2FASignup(code) {
   try {
-    signupModalRef.value?.setMessage('Verifying 2FA code…', 'info')
+    signupModalRef.value?.setMessage('Verifying code…', 'info')
     await auth.complete2FASignup(code)
     show2FASignup.value = false
     router.replace('/dashboard')

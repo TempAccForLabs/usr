@@ -66,35 +66,39 @@ async def create_user_account(
     # auth.service.UserService
     new_user_account = await user_service.create_user(user_data, session)
 
-    # GENERATE A DEFAULT TOTP SECRET FOR IMMEDIATE 2FA REQUIREMENT
-    # THIS IS FOR THE MANDATORY 2FA DURING SIGNUP FLOW
+    # Generate TOTP secret and QR code for mandatory 2FA setup during signup
     totp_secret = totp_service.generate_totp_secret()
     encrypted_secret = encrypt_data(totp_secret)
     new_user_account.totp_secret = encrypted_secret
-    
-    # DO NOT ENABLE 2FA YET - USER MUST VERIFY DURING SIGNUP PROCESS FIRST
-    new_user_account.is_2fa_enabled = False  # USER MUST VERIFY BEFORE ENABLING
-    
-    
+
+    # 2FA not enabled yet — user must scan QR and verify before it activates
+    new_user_account.is_2fa_enabled = False
+
     await session.commit()
     await session.refresh(new_user_account)
 
-    # RETURN A TEMPORARY TOKEN FOR 2FA VERIFICATION DURING SIGNUP
+    # Build TOTP provisioning URI and QR code image (base64 PNG data URI)
+    totp_uri = totp_service.get_totp_uri(totp_secret, new_user_account.email)
+    qr_code = totp_service.generate_qr_code(totp_uri)
+
+    # Short-lived temp token used only to authorise the verify-2fa-setup call
     temp_token = create_access_token(
-        user_data={"email": new_user_account.email, 
+        user_data={"email": new_user_account.email,
                    "user_uid": str(new_user_account.uid)},
-        expiry=timedelta(minutes=60),  # EXTENDED TO 60 MINUTES FOR SIGNUP TESTING
+        expiry=timedelta(minutes=60),
         refresh=False,
         is_2fa_verified=False
     )
-    
-    # RETURN A SPECIAL RESPONSE INDICATING 2FA VERIFICATION NEEDED FOR SIGNUP
+
     return JSONResponse(
         content={
             "requires_2fa_verification": True,
-            "message": "Account created. Please verify 2FA to complete signup.",
+            "message": "Account created. Scan the QR code with your authenticator app, then enter the 6-digit code to complete signup.",
             "temp_token": temp_token,
-            "user_email": new_user_account.email
+            "user_email": new_user_account.email,
+            "qr_code": qr_code,
+            "manual_code": totp_secret,
+            "totp_uri": totp_uri,
         }
     )
 
@@ -127,71 +131,32 @@ async def login_users(
         user = await user_service.get_user_by_email(email, session)
 
         if user is not None:
-            # verify pass against stored pass
-            # src.auth.utils
             password_valid = verify_password(password, user.password_hash)
 
             if password_valid:
-                # Since 2FA is always enabled, always require 2FA verification
-                """
-                2fa flow for all users
-                """
-                ######
-                """
-                totp
-                """
-                ######
-
-                ## Return temporary token for 2FA verification
-                ### The temporary token is different from the full access token. 
-                ### It represents "credentials verified, 2FA pending" 
-                ### while the full access token represents "credentials verified AND 2FA verified." 
-                ### This separation ensures that a user can't access protected resources until they 
-                ### complete both steps.
-
-                temp_token = create_access_token(
-                    user_data={"email": user.email, 
+                # Login requires only valid credentials — 2FA was set up at signup.
+                # Issue full JWT tokens directly.
+                access_token = create_access_token(
+                    user_data={"email": user.email,
                                "user_uid": str(user.uid)},
-                    #expiry=timedelta(minutes=5),  # Short-lived token
-                    # important: change after testing back to 5 min
-                    expiry=timedelta(minutes=60),  # EXTENDED TO 60 MINUTES FOR TESTING
-                    refresh=False,
-                    is_2fa_verified=False
+                    is_2fa_verified=True
                 )
-                
-                # Return using JSONResponse to ensure proper serialization
-                # doesn't raize serialization error, while maintaining
-                # the LoginResponseModel schema format to return against
-                # (JSONResponse bypasses the automatic Pydantic model serialization)
+                refresh_token = create_access_token(
+                    user_data={"email": user.email,
+                               "user_uid": str(user.uid)},
+                    refresh=True,
+                    expiry=timedelta(days=REFRESH_TOKEN_EXPIRY),
+                    is_2fa_verified=True
+                )
                 return JSONResponse(
                     content={
-                        "requires_2fa": True,
-                        "message": "2FA verification required",
-                        "access_token": temp_token,
-                        "refresh_token": None,
-                        "user": None
+                        "requires_2fa": False,
+                        "message": "Login successful",
+                        "access_token": access_token,
+                        "refresh_token": refresh_token,
+                        "user": {"email": user.email, "uid": str(user.uid)},
                     }
                 )
-
-                """
-                return LoginResponseModel(
-                    requires_2fa=True,
-                    message="2FA verification required",
-                    access_token=temp_token,
-                    refresh_token=None,
-                    user=None
-                )"""
-
-                # IMPORTANT! The serializable dictionary format doesn't
-                # match the serializable pydantic model exactly 
-                # return {
-                #     "requires_2fa": True,
-                #     "message": "2FA verification required",
-                #     "access_token": temp_token,
-                #     "refresh_token": None,
-                #     "user": None
-                # }
-
 
                 ####################### prev. implementation for using opt out of 2fa
                 # if user.is_2fa_enabled:
@@ -672,15 +637,30 @@ async def verify_2fa_setup(
             )
         
 
-        # 🟢 FINALLY enable 2FA after successful verification        
-        # Enable 2FA
+        # Enable 2FA after successful verification
         user.is_2fa_enabled = True
         await session.commit()
-        
-        return {
-            "message": "2FA enabled successfully",
-            "backup_codes": []  # You can implement backup codes here
-        }
+
+        # Issue full JWT tokens so the user is immediately logged in after signup
+        access_token = create_access_token(
+            user_data={"email": user.email, "user_uid": str(user.uid)},
+            is_2fa_verified=True
+        )
+        refresh_token = create_access_token(
+            user_data={"email": user.email, "user_uid": str(user.uid)},
+            refresh=True,
+            expiry=timedelta(days=REFRESH_TOKEN_EXPIRY),
+            is_2fa_verified=True
+        )
+
+        return JSONResponse(
+            content={
+                "message": "2FA enabled successfully. Welcome!",
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": {"email": user.email, "uid": str(user.uid)},
+            }
+        )
         
     except HTTPException:
         raise

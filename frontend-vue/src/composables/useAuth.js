@@ -2,11 +2,11 @@ import { reactive, computed } from 'vue'
 import { API_BASE_URL } from '../config.js'
 
 const state = reactive({
-  accessToken: localStorage.getItem('access_token') || null,
+  accessToken:  localStorage.getItem('access_token')  || null,
   refreshToken: localStorage.getItem('refresh_token') || null,
-  userEmail: localStorage.getItem('user_email') || null,
-  tempToken: localStorage.getItem('temp_token') || null,
-  pending2FA: localStorage.getItem('pending_2fa') === 'true',
+  userEmail:    localStorage.getItem('user_email')    || null,
+  tempToken:    localStorage.getItem('temp_token')    || null,
+  pending2FA:   localStorage.getItem('pending_2fa') === 'true',
 })
 
 const isAuthenticated = computed(() => !!state.accessToken)
@@ -28,9 +28,9 @@ async function request(endpoint, options = {}, useTokenOverride = null) {
 }
 
 function setTokens(accessToken, refreshToken) {
-  state.accessToken = accessToken
+  state.accessToken  = accessToken
   state.refreshToken = refreshToken
-  localStorage.setItem('access_token', accessToken)
+  localStorage.setItem('access_token',  accessToken)
   localStorage.setItem('refresh_token', refreshToken)
 }
 
@@ -41,15 +41,15 @@ function setUserEmail(email) {
 
 function clear2FAState() {
   state.pending2FA = false
-  state.tempToken = null
+  state.tempToken  = null
   localStorage.removeItem('pending_2fa')
   localStorage.removeItem('temp_token')
 }
 
 function logout() {
-  state.accessToken = null
+  state.accessToken  = null
   state.refreshToken = null
-  state.userEmail = null
+  state.userEmail    = null
   clear2FAState()
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
@@ -61,15 +61,7 @@ async function login(email, password) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   })
-  if (data.requires_2fa) {
-    state.pending2FA = true
-    state.tempToken = data.access_token
-    state.userEmail = email
-    localStorage.setItem('pending_2fa', 'true')
-    localStorage.setItem('temp_token', data.access_token)
-    localStorage.setItem('user_email', email)
-    return { requires2FA: true, message: data.message }
-  }
+  // Login now issues full JWT directly — no 2FA step on login
   setTokens(data.access_token, data.refresh_token)
   setUserEmail(data.user.email)
   clear2FAState()
@@ -81,28 +73,19 @@ async function signup(userData) {
     method: 'POST',
     body: JSON.stringify(userData),
   })
+  // Store temp token for the verify-2fa-setup call
   state.tempToken = data.temp_token
-  localStorage.setItem('temp_token', data.temp_token)
+  localStorage.setItem('temp_token',  data.temp_token)
   localStorage.setItem('pending_2fa', 'true')
   return {
     requires2fa_verification: true,
-    message: data.message,
+    message:    data.message,
     temp_token: data.temp_token,
     user_email: data.user_email,
+    qr_code:    data.qr_code,
+    manual_code: data.manual_code,
+    totp_uri:   data.totp_uri,
   }
-}
-
-async function complete2FALogin(code) {
-  const data = await request(
-    '/auth/verify-2fa',
-    { method: 'POST', body: JSON.stringify({ code }) },
-    state.tempToken,
-  )
-  setTokens(data.access_token, data.refresh_token)
-  setUserEmail(data.user.email)
-  state.accessToken = data.access_token
-  clear2FAState()
-  return data
 }
 
 async function complete2FASignup(code) {
@@ -111,6 +94,7 @@ async function complete2FASignup(code) {
     { method: 'POST', body: JSON.stringify({ code }) },
     state.tempToken,
   )
+  // verify-2fa-setup now returns full tokens after enabling 2FA
   setTokens(data.access_token, data.refresh_token)
   setUserEmail(data.user.email)
   clear2FAState()
@@ -161,7 +145,6 @@ export function useAuth() {
     login,
     signup,
     logout,
-    complete2FALogin,
     complete2FASignup,
     refreshAccessToken,
     getCurrentUser,
