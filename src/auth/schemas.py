@@ -1,7 +1,8 @@
 import uuid
+import re
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 #####
 # import other schemas as necessary here
@@ -37,12 +38,40 @@ class LoginResponseModel(BaseModel):
 
 
 class UserCreateModel(BaseModel):
-    # pydantic Field is used to enforce constraints 
-    first_name: str = Field(max_length = 25)
-    last_name: str = Field(max_length = 25)
-    username: str = Field(max_length = 8)
-    email: str = Field(max_length = 40)
-    password: str = Field(min_length=6)
+    first_name: str = Field(max_length=25)
+    last_name:  str = Field(max_length=25)
+    username:   str = Field(max_length=8)
+    email:      str = Field(max_length=40)
+    password:   str = Field(min_length=16, max_length=50)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        errors = []
+
+        if len(v) < 16:
+            errors.append("at least 16 characters")
+        if len(v) > 50:
+            errors.append("no more than 50 characters")
+        if not re.search(r"[A-Z]", v):
+            errors.append("at least one capital letter")
+        if not re.search(r"\d", v):
+            errors.append("at least one digit")
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?`~]", v):
+            errors.append("at least one special character")
+
+        spaces = [i for i, c in enumerate(v) if c == " "]
+        if len(spaces) < 2:
+            errors.append("at least two spaces")
+        else:
+            for a, b in zip(spaces, spaces[1:]):
+                if b - a == 1:
+                    errors.append("spaces must not be adjacent to each other")
+                    break
+
+        if errors:
+            raise ValueError("Password must contain: " + "; ".join(errors))
+        return v
 
 # IMPORTANT!
 # The auth.schemas UserModel and auth.models User attributes
