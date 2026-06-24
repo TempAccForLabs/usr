@@ -5,9 +5,10 @@ from src.config import Config
 from sqlalchemy.orm import sessionmaker
 import os
 # IMPORTANT!
-# Even if you don't use the classes directly in that file, 
+# Even if you don't use the classes directly in that file,
 # importing it ensures the metadata includes it.
 from src.auth.models import User
+from src.pki.models import ClientCertificate  # noqa: F401 — registers table in metadata
 
 def get_async_db_url(url: str) -> str:
     """Convert postgresql:// to postgresql+asyncpg:// for async driver"""
@@ -43,6 +44,7 @@ engine = create_async_engine(
 async def initdb():
     async with engine.begin() as conn:
         from src.auth.models import User
+        from src.pki.models import ClientCertificate  # noqa: F401 — ensure table registered
         await conn.run_sync(SQLModel.metadata.create_all)
         print("Database tables created/verified successfully.")
 
