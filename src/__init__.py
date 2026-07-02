@@ -8,6 +8,7 @@ from src.auth.routes import auth_router
 from contextlib import asynccontextmanager
 from src.db.main import initdb, get_session
 from src.pki.pki_engine import ensure_root_ca_exists
+from src.pki.routes import pki_router
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -83,6 +84,12 @@ app.include_router(
     auth_router,
     prefix="/auth",
     tags=["auth"],
+)
+
+app.include_router(
+    pki_router,
+    prefix="/api/certificates",
+    tags=["certificates"],
 )
 
 try:
