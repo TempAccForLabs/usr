@@ -7,6 +7,7 @@ from src.auth.routes import auth_router
 
 from contextlib import asynccontextmanager
 from src.db.main import initdb, get_session
+from src.pki.pki_engine import ensure_root_ca_exists
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -54,6 +55,11 @@ async def lifespan(app: FastAPI):
         print("✅ Database connection verified - Application starting")
     else:
         print("🚨 Database connection failed - Check your configuration")
+
+    # Ensure the Root CA (our automated passport office) exists before
+    # the app starts accepting requests.
+    ensure_root_ca_exists()
+
     yield
     print("🛑 Server is stopping")
 
