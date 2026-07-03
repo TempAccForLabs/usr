@@ -78,6 +78,37 @@
         >
           {{ generatingCert ? 'Generating…' : 'Generate New Certificate' }}
         </button>
+
+        <div style="margin-top:20px;">
+          <h4 style="margin-bottom:10px;">Certificate History</h4>
+          <p v-if="loadingHistory" style="color:#495057;">Loading certificate history…</p>
+          <p v-else-if="historyError" style="color:#b02a37;">{{ historyError }}</p>
+          <p v-else-if="certHistory.length === 0" style="color:#495057;">
+            No certificates generated yet.
+          </p>
+          <table v-else class="cert-history-table">
+            <thead>
+              <tr>
+                <th>Serial Number</th>
+                <th>Issued Date</th>
+                <th>Expiration Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="cert in certHistory" :key="cert.id">
+                <td class="cert-serial">{{ cert.serial_number }}</td>
+                <td>{{ formatDate(cert.valid_from) }}</td>
+                <td>{{ formatDate(cert.valid_until) }}</td>
+                <td>
+                  <span :class="['cert-status-badge', cert.is_revoked ? 'revoked' : 'active']">
+                    {{ cert.is_revoked ? 'Revoked' : 'Active (Whitelisted)' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- User / Token Data -->
@@ -138,6 +169,10 @@ const certPassword = ref('')
 const certModalError = ref('')
 const generatingCert = ref(false)
 
+const certHistory = ref([])
+const loadingHistory = ref(false)
+const historyError = ref('')
+
 // ── helpers ────────────────────────────────────────────────────────────────
 function updateDebugDisplay() {
   const authed = auth.isAuthenticated.value
@@ -164,6 +199,7 @@ onMounted(async () => {
   }
   // auto debug report
   setTimeout(() => debugAuth(), 800)
+  fetchCertHistory()
 })
 
 // ── actions ────────────────────────────────────────────────────────────────
@@ -314,6 +350,26 @@ function triggerP12Download(blob) {
   window.URL.revokeObjectURL(url)
 }
 
+function formatDate(isoString) {
+  if (!isoString) return '—'
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return isoString
+  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+async function fetchCertHistory() {
+  if (!auth.isAuthenticated.value) return
+  loadingHistory.value = true
+  historyError.value = ''
+  try {
+    certHistory.value = await auth.request('/api/certificates/history')
+  } catch (err) {
+    historyError.value = `Failed to load certificate history: ${err.message}`
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
 async function submitCertPassword() {
   certModalError.value = ''
 
@@ -354,6 +410,7 @@ async function submitCertPassword() {
 
     showCertModal.value = false
     certPassword.value = ''
+    fetchCertHistory()
   } catch (err) {
     certModalError.value = err.message || 'Something went wrong generating your certificate.'
     alert(`Certificate generation failed: ${certModalError.value}`)

@@ -266,6 +266,60 @@ input:focus {
   font-family: monospace;
 }
 
+.cert-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 5px;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+.cert-history-table th,
+.cert-history-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.cert-history-table th {
+  background: #eef0f5;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.cert-history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cert-history-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.cert-serial {
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.cert-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.cert-status-badge.active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.cert-status-badge.revoked {
+  background: #f8d7da;
+  color: #721c24;
+}
+
 @media (max-width: 600px) {
   .container {
     margin: 0;

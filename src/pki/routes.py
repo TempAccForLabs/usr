@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, status
 from fastapi.exceptions import HTTPException
 from fastapi.responses import Response
 from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import select
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -142,4 +143,49 @@ async def generate_client_certificate(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during certificate generation",
+        )
+
+
+@pki_router.get("/history", status_code=status.HTTP_200_OK)
+async def get_certificate_history(
+    token_details: dict = Depends(AccessTokenBearer()),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        user_email = token_details["user"]["email"]
+        current_user = await user_service.get_user_by_email(user_email, session)
+
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        statement = (
+            select(ClientCertificate)
+            .where(ClientCertificate.user_id == current_user.uid)
+            .order_by(ClientCertificate.created_at.desc())
+        )
+        result = await session.execute(statement)
+        certificates = result.scalars().all()
+
+        return [
+            {
+                "id": cert.id,
+                "serial_number": cert.serial_number,
+                "valid_from": cert.valid_from.isoformat(),
+                "valid_until": cert.valid_until.isoformat(),
+                "is_revoked": cert.is_revoked,
+                "created_at": cert.created_at.isoformat(),
+            }
+            for cert in certificates
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Certificate history error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while fetching certificate history",
         )
