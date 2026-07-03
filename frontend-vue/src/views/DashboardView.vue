@@ -64,8 +64,54 @@
         />
       </div>
 
+      <!-- PKI Management -->
+      <div style="margin-top:20px; padding:15px; background:#f8f9fa; border-radius:5px;">
+        <h3 style="margin-top:0;">🔏 PKI Management</h3>
+        <p style="color:#495057; font-size:0.95rem;">
+          Generate a personal digital certificate (.p12) you can use to sign documents.
+        </p>
+        <button
+          class="btn btn-primary"
+          style="width:auto;"
+          :disabled="generatingCert"
+          @click="openCertModal"
+        >
+          {{ generatingCert ? 'Generating…' : 'Generate New Certificate' }}
+        </button>
+      </div>
+
       <!-- User / Token Data -->
       <div class="user-data-box" :style="{ color: userDataColor }">{{ userDataText }}</div>
+    </div>
+
+    <!-- Certificate Password Modal -->
+    <div v-if="showCertModal" class="modal-overlay" @click.self="closeCertModal">
+      <div class="modal-box">
+        <h3>Create a Certificate Password</h3>
+        <p>
+          Choose a password to protect your certificate file. You'll need it to unlock
+          the certificate when signing documents later.
+        </p>
+        <p style="color:#b02a37; font-weight:600;">
+          ⚠️ You must remember this password to sign documents later. It cannot be recovered.
+        </p>
+        <input
+          v-model="certPassword"
+          type="password"
+          placeholder="Certificate Password (min 6 characters)"
+          style="margin-bottom:15px;"
+          @keyup.enter="submitCertPassword"
+        />
+        <div v-if="certModalError" class="message error">{{ certModalError }}</div>
+        <div class="btn-group" style="margin-top:15px;">
+          <button class="btn btn-secondary" :disabled="generatingCert" @click="closeCertModal">
+            Cancel
+          </button>
+          <button class="btn btn-primary" :disabled="generatingCert" @click="submitCertPassword">
+            {{ generatingCert ? 'Generating…' : 'Generate' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -74,6 +120,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth.js'
+import { API_BASE_URL } from '../config.js'
 
 const auth = useAuth()
 const router = useRouter()
@@ -85,6 +132,11 @@ const twoFAEnabled = ref(false)
 const userDataText = ref('User data and token info will appear here…')
 const userDataColor = ref('inherit')
 const debugInfoHtml = ref('Debug info will appear here…')
+
+const showCertModal = ref(false)
+const certPassword = ref('')
+const certModalError = ref('')
+const generatingCert = ref(false)
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function updateDebugDisplay() {
@@ -223,6 +275,91 @@ function debugLogout() {
   console.log('🔄 Debug: Clearing all auth data')
   auth.logout()
   router.replace('/')
+}
+
+// ── PKI certificate generation ────────────────────────────────────────────
+function openCertModal() {
+  certPassword.value = ''
+  certModalError.value = ''
+  showCertModal.value = true
+}
+
+function closeCertModal() {
+  if (generatingCert.value) return
+  showCertModal.value = false
+  certPassword.value = ''
+  certModalError.value = ''
+}
+
+async function requestCertificate(token) {
+  return fetch(`${API_BASE_URL}/api/certificates/generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ p12_password: certPassword.value }),
+  })
+}
+
+function triggerP12Download(blob) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.style.display = 'none'
+  link.href = url
+  link.download = 'user_certificate.p12'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+async function submitCertPassword() {
+  certModalError.value = ''
+
+  if (!certPassword.value || certPassword.value.length < 6) {
+    certModalError.value = 'Password must be at least 6 characters.'
+    return
+  }
+
+  generatingCert.value = true
+  try {
+    let response = await requestCertificate(auth.state.accessToken)
+
+    // Access token expired — refresh once and retry automatically
+    if (response.status === 401) {
+      try {
+        await auth.refreshAccessToken()
+        response = await requestCertificate(auth.state.accessToken)
+      } catch (refreshErr) {
+        auth.logout()
+        router.replace('/')
+        throw new Error('Your session expired. Please log in again.')
+      }
+    }
+
+    if (!response.ok) {
+      let detail = 'Failed to generate certificate.'
+      try {
+        const errorData = await response.json()
+        detail = errorData.detail || detail
+      } catch {
+        // response body wasn't JSON — keep default message
+      }
+      throw new Error(detail)
+    }
+
+    const blob = await response.blob()
+    triggerP12Download(blob)
+
+    showCertModal.value = false
+    certPassword.value = ''
+  } catch (err) {
+    certModalError.value = err.message || 'Something went wrong generating your certificate.'
+    alert(`Certificate generation failed: ${certModalError.value}`)
+  } finally {
+    generatingCert.value = false
+  }
 }
 
 async function forceRefresh() {
