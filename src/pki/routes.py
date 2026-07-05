@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, File, UploadFile, Form
 from fastapi.exceptions import HTTPException
 from fastapi.responses import Response
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -19,6 +19,7 @@ from src.auth.service import UserService
 from .pki_engine import get_root_ca
 from .models import ClientCertificate
 from .schemas import CertificateGenerateModel
+from .signer import sign_pdf_document
 
 pki_router = APIRouter()
 user_service = UserService()
@@ -146,6 +147,76 @@ async def generate_client_certificate(
         )
 
 
+@pki_router.post("/sign", status_code=status.HTTP_200_OK)
+async def sign_pdf(
+    pdf_file: UploadFile = File(...),
+    p12_file: UploadFile = File(...),
+    p12_password: str = Form(...),
+    token_details: dict = Depends(AccessTokenBearer()),
+):
+    """
+    Sign a PDF document with a client's certificate.
+
+    **Protected Route:** Requires valid JWT access token.
+
+    **Input (Multipart Form):**
+    - `pdf_file`: The PDF document to sign (UploadFile)
+    - `p12_file`: The client's PKCS#12 certificate file (UploadFile)
+    - `p12_password`: The password protecting the .p12 file (Form field)
+
+    **Returns:**
+    - Signed PDF document as a downloadable file with:
+      - Content-Type: application/pdf
+      - Content-Disposition: attachment; filename="signed_document.pdf"
+
+    **Error Handling:**
+    - 400: Invalid certificate password, corrupted .p12 file, or corrupted PDF
+    - 403: Invalid or expired JWT token
+    - 500: Internal server error during signing process
+    """
+    try:
+        # 1. Read the bytes of pdf_file and p12_file asynchronously into memory
+        pdf_bytes = await pdf_file.read()
+        p12_bytes = await p12_file.read()
+
+        # 2. Pass the bytes and password to the sign_pdf_document() function
+        signed_pdf_bytes = await sign_pdf_document(pdf_bytes, p12_bytes, p12_password)
+
+        # 4. Return the signed PDF with proper headers
+        return Response(
+            content=signed_pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'attachment; filename="signed_document.pdf"'
+            },
+        )
+
+    except ValueError as e:
+        # Catch invalid password or corrupted .p12 file errors
+        print(f"PDF signing validation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except RuntimeError as e:
+        # Catch PDF signing process errors (corrupted PDF, signing failure, etc.)
+        print(f"PDF signing error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to sign PDF document. Please check the PDF file and try again.",
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions (e.g., from JWT validation)
+        raise
+    except Exception as e:
+        # Catch any unexpected errors
+        print(f"Unexpected error during PDF signing: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during PDF signing",
+        )
+
+
 @pki_router.get("/history", status_code=status.HTTP_200_OK)
 async def get_certificate_history(
     token_details: dict = Depends(AccessTokenBearer()),
@@ -189,3 +260,4 @@ async def get_certificate_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while fetching certificate history",
         )
+
