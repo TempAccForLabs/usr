@@ -111,6 +111,45 @@
         </div>
       </div>
 
+      <!-- Document Signing -->
+      <div style="margin-top:20px; padding:15px; background:#f8f9fa; border-radius:5px;">
+        <h3 style="margin-top:0;">📝 Document Signing</h3>
+        <p style="color:#495057; font-size:0.95rem;">
+          Sign a PDF document using your personal .p12 / .pfx certificate.
+        </p>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; margin-bottom:5px; font-weight:600;">PDF Document</label>
+          <input type="file" accept=".pdf" @change="onPdfChange" />
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; margin-bottom:5px; font-weight:600;">Digital Certificate</label>
+          <input type="file" accept=".p12,.pfx" @change="onP12Change" />
+        </div>
+
+        <div style="margin-bottom:15px;">
+          <label style="display:block; margin-bottom:5px; font-weight:600;">Certificate Password</label>
+          <input
+            v-model="signPassword"
+            type="password"
+            placeholder="Certificate password"
+            style="background-color: #FFFFFF; color: #000000;"
+          />
+        </div>
+
+        <button
+          class="btn btn-primary"
+          style="width:auto;"
+          :disabled="isLoading"
+          @click="signDocument"
+        >
+          {{ isLoading ? 'Signing…' : 'Sign Document' }}
+        </button>
+
+        <p v-if="signingError" style="color:#b02a37; margin-top:10px;">{{ signingError }}</p>
+      </div>
+
       <!-- User / Token Data -->
       <div class="user-data-box" :style="{ color: userDataColor }">{{ userDataText }}</div>
     </div>
@@ -172,6 +211,12 @@ const generatingCert = ref(false)
 const certHistory = ref([])
 const loadingHistory = ref(false)
 const historyError = ref('')
+
+const pdfFile = ref(null)
+const p12File = ref(null)
+const signPassword = ref('')
+const isLoading = ref(false)
+const signingError = ref('')
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function updateDebugDisplay() {
@@ -311,6 +356,87 @@ function debugLogout() {
   console.log('🔄 Debug: Clearing all auth data')
   auth.logout()
   router.replace('/')
+}
+
+// ── Document signing ───────────────────────────────────────────────────────
+function onPdfChange(event) {
+  pdfFile.value = event.target.files?.[0] ?? null
+}
+
+function onP12Change(event) {
+  p12File.value = event.target.files?.[0] ?? null
+}
+
+function buildSignFormData() {
+  const formData = new FormData()
+  formData.append('pdf_file', pdfFile.value)
+  formData.append('p12_file', p12File.value)
+  formData.append('p12_password', signPassword.value)
+  return formData
+}
+
+function requestSign(token) {
+  return fetch(`${API_BASE_URL}/api/certificates/sign`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: buildSignFormData(),
+  })
+}
+
+function triggerSignedDownload(blob) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.style.display = 'none'
+  link.href = url
+  link.download = 'signed_document.pdf'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
+
+async function signDocument() {
+  signingError.value = ''
+
+  if (!pdfFile.value || !p12File.value || !signPassword.value) {
+    signingError.value = 'Please select a PDF, a certificate, and enter the password.'
+    return
+  }
+
+  isLoading.value = true
+  try {
+    let response = await requestSign(auth.state.accessToken)
+
+    if (response.status === 401) {
+      try {
+        await auth.refreshAccessToken()
+        response = await requestSign(auth.state.accessToken)
+      } catch (refreshErr) {
+        auth.logout()
+        router.replace('/')
+        throw new Error('Your session expired. Please log in again.')
+      }
+    }
+
+    if (!response.ok) {
+      let detail = 'Failed to sign document.'
+      try {
+        const errorData = await response.json()
+        detail = errorData.detail || detail
+      } catch {
+        // response body wasn't JSON — keep default message
+      }
+      throw new Error(detail)
+    }
+
+    const blob = await response.blob()
+    triggerSignedDownload(blob)
+  } catch (err) {
+    signingError.value = err.message || 'Something went wrong signing the document.'
+    alert(`Document signing failed: ${signingError.value}`)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 // ── PKI certificate generation ────────────────────────────────────────────
