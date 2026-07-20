@@ -142,7 +142,7 @@
           class="btn btn-primary"
           style="width:auto;"
           :disabled="isLoading"
-          @click="signDocument"
+          @click="submitSigningRequest"
         >
           {{ isLoading ? 'Signing…' : 'Sign Document' }}
         </button>
@@ -395,7 +395,7 @@ function triggerSignedDownload(blob) {
   window.URL.revokeObjectURL(url)
 }
 
-async function signDocument() {
+async function submitSigningRequest() {
   signingError.value = ''
 
   if (!pdfFile.value || !p12File.value || !signPassword.value) {
@@ -431,6 +431,11 @@ async function signDocument() {
 
     const blob = await response.blob()
     triggerSignedDownload(blob)
+
+    // Reset reactive form refs after a successful download.
+    pdfFile.value = null
+    p12File.value = null
+    signPassword.value = ''
   } catch (err) {
     signingError.value = err.message || 'Something went wrong signing the document.'
     alert(`Document signing failed: ${signingError.value}`)
