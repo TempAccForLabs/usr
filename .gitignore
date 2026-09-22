@@ -1,9 +1,8 @@
-.env
-env/
-__pycache__/
-*.pyc
-migrations/
-frontend/node_modules/
-.vscode/
-.idea/
-certs/
+node_modules/  
+.venv/  
+*.replit-backup  
+.env  
+env/  
+__pycache__/  
+certs/  
+migrations/  
